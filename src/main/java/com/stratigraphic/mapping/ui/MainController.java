@@ -1,0 +1,340 @@
+package com.stratigraphic.mapping.ui;
+
+import com.stratigraphic.mapping.chart.SectionChart;
+import com.stratigraphic.mapping.chart.SectionColorChart;
+import com.stratigraphic.mapping.chart.WallLineUnfoldChart;
+import com.stratigraphic.mapping.model.StratumModel;
+import com.stratigraphic.mapping.reader.StratumModelReader;
+import javafx.embed.swing.SwingFXUtils;
+import javafx.fxml.FXML;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.SnapshotParameters;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.image.WritableImage;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.stage.FileChooser;
+
+import javax.imageio.ImageIO;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Locale;
+
+/**
+ * 主窗口：左侧统一参数，中间彩色地层剖面，右侧彩色井壁展开图。
+ *
+ * <p>右侧只使用当前地层模型、统一倾角和左侧输入的两个展开点 A/B，
+ * 不读取模值、相位或其他额外井壁测量数据。
+ */
+public final class MainController {
+
+    @FXML
+    private BorderPane appRoot;
+    @FXML
+    private VBox parameterSlot;
+    @FXML
+    private VBox colorChartSlot;
+    @FXML
+    private VBox wallChartSlot;
+
+    @FXML
+    private Label statusDepth;
+    @FXML
+    private Label statusLayers;
+    @FXML
+    private Label statusWall;
+    @FXML
+    private Label statusZoom;
+    @FXML
+    private Label statusMessage;
+
+    private final ParameterPane parameterPane = new ParameterPane();
+
+    private final StackPane colorChartBox = new StackPane();
+    private final StackPane wallChartBox = new StackPane();
+
+    private final Label colorChartHint = new Label(
+            "载入参数或直接填写左侧数据后，点击「生成图表」显示彩色地层剖面图。");
+    private final Label wallChartHint = new Label(
+            "填写展开点 A/B 后点击「生成图表」，显示两点之间的彩色井壁展开图。");
+
+    private final FileChooser fileChooser = new FileChooser();
+
+    private FitPane colorFitPane;
+    private FitPane wallFitPane;
+
+    @FXML
+    private void initialize() {
+
+        parameterPane.setMinSize(0, 0);
+        parameterSlot.setMinSize(0, 0);
+        parameterSlot.getChildren().setAll(parameterPane);
+
+        colorChartSlot.setMinSize(0, 0);
+        colorChartSlot.getStyleClass().add("chart-slot");
+        prepareChartBox(colorChartBox);
+        colorChartSlot.getChildren().setAll(
+                wrapWithHeader("岩性剖面", "COLOR", colorChartBox));
+
+        wallChartSlot.setMinSize(0, 0);
+        wallChartSlot.getStyleClass().add("chart-slot");
+        prepareChartBox(wallChartBox);
+        wallChartSlot.getChildren().setAll(
+                wrapWithHeader("井壁展开图（彩色）", "UNFOLD", wallChartBox));
+
+        parameterPane.setOnOpenFile(this::openFile);
+        parameterPane.setOnConfirmData(this::generateCharts);
+        parameterPane.setOnDataChanged(this::refreshStatus);
+
+        showColorChartHint();
+        showWallChartHint();
+    }
+
+    private void prepareChartBox(StackPane box) {
+        box.setMinSize(0, 0);
+        box.getStyleClass().add("chart-box");
+        VBox.setVgrow(box, Priority.ALWAYS);
+    }
+
+    private VBox wrapWithHeader(String title, String tag, StackPane chartBox) {
+
+        Label titleLabel = new Label(title);
+        titleLabel.getStyleClass().add("ch-title");
+
+        Label tagLabel = new Label(tag);
+        tagLabel.getStyleClass().add("ch-tag");
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        HBox header = new HBox(8, titleLabel, spacer, tagLabel);
+        header.getStyleClass().add("chart-header");
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        VBox box = new VBox(header, chartBox);
+        VBox.setVgrow(chartBox, Priority.ALWAYS);
+        return box;
+    }
+
+    @FXML
+    private void openWallResistivityView() {
+
+        try {
+            PageNavigation.show(appRoot,
+                    "main-view.fxml",
+                    "wall-unfold-view.fxml",
+                    "电成像响应模拟");
+        } catch (IOException | IllegalStateException ex) {
+            error("打开电成像响应模拟失败：" + ex.getMessage());
+        }
+    }
+
+    @FXML
+    private void openFile() {
+
+        fileChooser.setTitle("选择地层剖面参数文件");
+        fileChooser.getExtensionFilters().setAll(
+                new FileChooser.ExtensionFilter("文本文件 (*.txt)", "*.txt"),
+                new FileChooser.ExtensionFilter("全部文件", "*.*"));
+
+        if (fileChooser.getInitialDirectory() == null) {
+            File workingDirectory = new File(System.getProperty("user.dir"));
+            if (workingDirectory.isDirectory()) {
+                fileChooser.setInitialDirectory(workingDirectory);
+            }
+        }
+
+        File file = fileChooser.showOpenDialog(window());
+        if (file == null) {
+            return;
+        }
+
+        try {
+            StratumModel model = StratumModelReader.read(Path.of(file.getAbsolutePath()));
+            parameterPane.setModel(model,
+                    file.getName() + "    " + file.getAbsolutePath());
+            updateStatus(model);
+
+            // 载入只更新输入，不自动出图；等待用户点击「生成图表」。
+            showColorChartHint();
+            showWallChartHint();
+            statusZoom.setText("缩放 1.00×");
+            info("已载入地层参数，请检查输入后点击「生成图表」");
+        } catch (IOException ex) {
+            error("读取参数文件失败：" + ex.getMessage());
+        } catch (IllegalArgumentException ex) {
+            error("参数文件有问题：" + ex.getMessage());
+        }
+    }
+
+    private void generateCharts() {
+
+        StratumModel model;
+        try {
+            model = parameterPane.toModel();
+        } catch (IllegalArgumentException ex) {
+            error(ex.getMessage());
+            return;
+        }
+
+        drawColorChart(model);
+        updateStatus(model);
+
+        try {
+            drawWallChart(model);
+            info("彩色剖面和彩色井壁展开图已按当前参数更新");
+        } catch (IllegalArgumentException ex) {
+            showWallChartHint();
+            error("彩色剖面已更新；井壁展开图未生成：" + ex.getMessage());
+        }
+    }
+
+    private void drawWallChart(StratumModel model) {
+
+        ParameterPane.UnfoldInterval interval = parameterPane.toUnfoldInterval();
+        WallLineUnfoldChart chart = new WallLineUnfoldChart(
+                model, interval.start(), interval.end());
+        wallFitPane = installChart(chart, wallChartBox, null);
+
+        statusWall.setText(String.format(Locale.ROOT,
+                "展开 %.2f – %.2f m · 彩色", interval.start(), interval.end()));
+    }
+
+    private void drawColorChart(StratumModel model) {
+        colorFitPane = installChart(
+                new SectionColorChart(model),
+                colorChartBox,
+                new ColorBarPane(model.minResistivity(), model.maxResistivity()));
+    }
+
+    /** 把图装进可缩放面板；右侧可挂不参与缩放的色标。 */
+    private FitPane installChart(Pane chart, StackPane chartBox, ColorBarPane colorBar) {
+
+        FitPane fit = new FitPane(chart);
+        fit.setMinSize(0, 0);
+
+        if (colorBar != null) {
+            fit.setRightInset(ColorBarPane.WIDTH);
+            if (chart instanceof SectionChart sectionChart) {
+                fit.setRightAccessory(colorBar,
+                        sectionChart.figureTop(), sectionChart.figureHeight());
+            }
+        }
+
+        Button reset = new Button("重置");
+        reset.getStyleClass().add("overlay-button");
+        reset.setOnAction(e -> fit.resetZoom());
+        reset.visibleProperty().bind(fit.zoomFactorProperty().greaterThan(1.001));
+
+        StackPane wrapper = new StackPane(fit, reset);
+        StackPane.setAlignment(reset, Pos.TOP_LEFT);
+        StackPane.setMargin(reset, new Insets(10));
+        chartBox.getChildren().setAll(wrapper);
+
+        fit.zoomFactorProperty().addListener((o, oldValue, newValue) ->
+                statusZoom.setText(String.format(Locale.ROOT,
+                        "缩放 %.2f×", newValue.doubleValue())));
+        statusZoom.setText("缩放 1.00×");
+        return fit;
+    }
+
+    @FXML
+    private void resetView() {
+
+        if (colorFitPane != null) {
+            colorFitPane.resetZoom();
+        }
+        if (wallFitPane != null) {
+            wallFitPane.resetZoom();
+        }
+        statusZoom.setText("缩放 1.00×");
+    }
+
+    @FXML
+    private void exportPng() {
+
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("导出 PNG");
+        chooser.getExtensionFilters().setAll(
+                new FileChooser.ExtensionFilter("PNG 图片 (*.png)", "*.png"));
+
+        File file = chooser.showSaveDialog(window());
+        if (file == null) {
+            return;
+        }
+        if (!file.getName().toLowerCase(Locale.ROOT).endsWith(".png")) {
+            file = new File(file.getAbsolutePath() + ".png");
+        }
+
+        try {
+            SnapshotParameters params = new SnapshotParameters();
+            params.setFill(Color.WHITE);
+            WritableImage image = appRoot.snapshot(params, null);
+            ImageIO.write(SwingFXUtils.fromFXImage(image, null), "png", file);
+            info("已导出 " + file.getName());
+        } catch (IOException ex) {
+            error("导出失败：" + ex.getMessage());
+        }
+    }
+
+    private void updateStatus(StratumModel model) {
+        statusDepth.setText(String.format(Locale.ROOT,
+                "深度 %.2f – %.2f m", model.minDepth(), model.maxDepth()));
+        statusLayers.setText(String.format(Locale.ROOT,
+                "%d 界面 · %d 层 · 倾角 %.1f°",
+                model.interfaceCount(), model.layerCount(), model.dipAngle()));
+    }
+
+    private void refreshStatus() {
+        StratumModel model = parameterPane.tryToModel();
+        if (model != null) {
+            updateStatus(model);
+        }
+    }
+
+    private void showColorChartHint() {
+        showHint(colorChartBox, colorChartHint);
+        colorFitPane = null;
+    }
+
+    private void showWallChartHint() {
+        showHint(wallChartBox, wallChartHint);
+        wallFitPane = null;
+        statusWall.setText("展开 A/B —");
+    }
+
+    private static void showHint(StackPane box, Label hint) {
+
+        hint.setWrapText(true);
+        hint.setMaxWidth(360);
+        hint.setAlignment(Pos.CENTER);
+
+        if (!hint.getStyleClass().contains("chart-hint")) {
+            hint.getStyleClass().add("chart-hint");
+        }
+        box.getChildren().setAll(hint);
+    }
+
+    private void info(String message) {
+        parameterPane.showInfo(message);
+        statusMessage.setText(message);
+    }
+
+    private void error(String message) {
+        parameterPane.showError(message);
+        statusMessage.setText(message);
+    }
+
+    private javafx.stage.Window window() {
+        return appRoot.getScene() == null ? null : appRoot.getScene().getWindow();
+    }
+}

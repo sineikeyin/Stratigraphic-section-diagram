@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<BorderPane xmlns:fx="http://javafx.com/fxml" fx:id="appRoot" styleClass="imaging-page" fx:controller="com.stratigraphic.mapping.ui.WallUnfoldController">
+ <top><HBox styleClass="app-toolbar" alignment="CENTER_LEFT" spacing="8">
+  <Button styleClass="tool-button" text="地层剖面与井壁展开图" onAction="#showMainView"/>
+  <Button styleClass="tool-button, active" text="电成像响应模拟"/>
+  <Region HBox.hgrow="ALWAYS"/>
+  <Button fx:id="exportButton" styleClass="tool-button" text="导出 PNG" onAction="#exportPng" disable="true"/>
+  <Button fx:id="resetButton" styleClass="tool-button" text="重置视图" onAction="#resetView" disable="true"/>
+ </HBox></top>
+ <center><GridPane>
+  <columnConstraints><ColumnConstraints minWidth="218" prefWidth="238" maxWidth="238"/><ColumnConstraints hgrow="ALWAYS" minWidth="0"/></columnConstraints>
+  <rowConstraints><RowConstraints vgrow="ALWAYS"/></rowConstraints>
+  <VBox fx:id="parameterSlot" minWidth="0" GridPane.columnIndex="0"/>
+  <GridPane GridPane.columnIndex="1" minWidth="0">
+   <columnConstraints><ColumnConstraints percentWidth="33.333"/><ColumnConstraints percentWidth="33.333"/><ColumnConstraints percentWidth="33.334"/></columnConstraints>
+   <rowConstraints><RowConstraints vgrow="ALWAYS"/></rowConstraints>
+   <VBox minWidth="0" styleClass="chart-slot" GridPane.columnIndex="0">
+    <Label text="模值展开图" styleClass="ch-title" wrapText="true"/>
+    <StackPane fx:id="amplitudeBox" minWidth="0" minHeight="0" styleClass="chart-box" VBox.vgrow="ALWAYS"/>
+   </VBox>
+   <VBox minWidth="0" styleClass="chart-slot" GridPane.columnIndex="1">
+    <Label text="相位展开图" styleClass="ch-title" wrapText="true"/>
+    <StackPane fx:id="phaseBox" minWidth="0" minHeight="0" styleClass="chart-box" VBox.vgrow="ALWAYS"/>
+   </VBox>
+   <VBox minWidth="0" styleClass="chart-slot" GridPane.columnIndex="2">
+    <Label text="井壁电阻率展开图（待接入）" styleClass="ch-title" wrapText="true"/>
+    <StackPane minWidth="0" minHeight="0" styleClass="chart-box" VBox.vgrow="ALWAYS"><Label text="待接入模型电阻率数据" wrapText="true" styleClass="chart-hint"/></StackPane>
+   </VBox>
+  </GridPane>
+ </GridPane></center>
+ <bottom><HBox styleClass="app-statusbar"><Label fx:id="statusMessage" text="就绪 · 获得输入数据 → 计算输出数据 → 生成图片" maxWidth="Infinity" HBox.hgrow="ALWAYS"/></HBox></bottom>
+</BorderPane>

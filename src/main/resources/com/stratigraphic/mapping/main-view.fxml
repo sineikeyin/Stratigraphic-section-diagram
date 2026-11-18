@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.VBox?>
+
+<!--
+  主窗口结构：
+    top    顶部工具栏（打开参数 / 导出 / 重置视图）
+    center 三栏：左参数面板、中彩色地层剖面、右井壁展开图
+    bottom 底部状态栏
+-->
+<BorderPane xmlns:fx="http://javafx.com/fxml"
+            fx:id="appRoot"
+            fx:controller="com.stratigraphic.mapping.ui.MainController">
+
+    <top>
+        <HBox styleClass="app-toolbar" alignment="CENTER_LEFT" spacing="8">
+            <children>
+                <Button styleClass="tool-button, active" text="地层剖面与井壁展开图"/>
+                <Button styleClass="tool-button" text="电成像响应模拟"
+                        onAction="#openWallResistivityView"/>
+
+                <Region HBox.hgrow="ALWAYS"/>
+
+                <Button styleClass="tool-button" text="打开参数…"
+                        onAction="#openFile"/>
+                <Button styleClass="tool-button" text="导出 PNG"
+                        onAction="#exportPng"/>
+                <Button styleClass="tool-button" text="重置视图"
+                        onAction="#resetView"/>
+            </children>
+        </HBox>
+    </top>
+
+    <center>
+        <GridPane fx:id="mainGrid">
+            <columnConstraints>
+                <ColumnConstraints percentWidth="25"/>
+                <ColumnConstraints percentWidth="33"/>
+                <ColumnConstraints percentWidth="42"/>
+            </columnConstraints>
+            <rowConstraints>
+                <RowConstraints vgrow="ALWAYS"/>
+            </rowConstraints>
+
+            <children>
+                <!-- 左侧：统一参数和两个展开点 -->
+                <VBox fx:id="parameterSlot" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
+
+                <!-- 中间：彩色地层剖面 -->
+                <VBox fx:id="colorChartSlot" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+
+                <!-- 右侧：井壁展开图 -->
+                <VBox fx:id="wallChartSlot" GridPane.columnIndex="2" GridPane.rowIndex="0"/>
+            </children>
+        </GridPane>
+    </center>
+
+    <bottom>
+        <HBox styleClass="app-statusbar" alignment="CENTER_LEFT" spacing="10">
+            <children>
+                <Label fx:id="statusDepth" styleClass="msg" text="深度 —"/>
+                <Label styleClass="sep" text="│"/>
+                <Label fx:id="statusLayers" styleClass="msg" text="— 界面 · — 层"/>
+                <Label styleClass="sep" text="│"/>
+                <Label fx:id="statusWall" styleClass="msg" text="展开 A/B —"/>
+                <Label styleClass="sep" text="│"/>
+                <Label fx:id="statusZoom" styleClass="msg" text="缩放 1.00×"/>
+                <Label styleClass="sep" text="│"/>
+                <Label fx:id="statusMessage" styleClass="msg" text="就绪 · 载入参数或填写数据后生成图表"/>
+            </children>
+        </HBox>
+    </bottom>
+</BorderPane>
