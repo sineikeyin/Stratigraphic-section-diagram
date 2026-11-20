@@ -50,7 +50,7 @@ public final class ResponseChart extends Region {
                 selectionColumn = (viewport.window().left() + (event.getX() - LEFT) / plotWidth() * viewport.window().span()) * WIDTH;
                 selectionDepth = depthAt((event.getY() - TOP) / plotHeight());
                 inspector.setText("深度 MD：" + selection.md() + " m\n电极编号：" + selection.electrode()
-                        + (phase ? "\n相位：" + selection.phase() + "°" : "\n模值：" + selection.amplitude()));
+                        + (phase ? "\n相位：" + selection.phase() + "°" : "\n模值：" + selection.amplitude() + " Ω·m"));
             }
             draw();
         });
@@ -253,6 +253,6 @@ public final class ResponseChart extends Region {
         graphics.setTextAlign(TextAlignment.RIGHT);
         graphics.fillText(String.format(Locale.ROOT, "%.4g", max), LEFT + plotWidth(), barY + 22);
         graphics.setTextAlign(TextAlignment.LEFT);
-        graphics.fillText(phase ? "相位 (°) · 线性" : "模值 · 对数 · 单位未提供", LEFT, barY - 6, plotWidth());
+        graphics.fillText(phase ? "相位 (°) · 线性" : "模值 (Ω·m) · 对数", LEFT, barY - 6, plotWidth());
     }
 }

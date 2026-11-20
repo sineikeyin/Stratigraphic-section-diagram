@@ -48,6 +48,7 @@ public final class SimulationRunner {
     public Outcome runWithProgress(ModelInputs inputs,Path solverRoot,Path output,int limit,
                        Consumer<Progress> progress,BooleanSupplier stopRequested) throws IOException,InterruptedException {
         if(limit<1||limit>192) throw new IllegalArgumentException("试算数量应为 1～192");
+        InputPreparation.verifySnapshot(inputs);
         Files.createDirectories(output);
         String name="NGI_192_"+LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))+"_"+UUID.randomUUID().toString().substring(0,8);
         Path batch=Files.createDirectory(output.resolve(name+"_batch"));
@@ -77,6 +78,7 @@ public final class SimulationRunner {
                 }
             }
             Files.copy(inputs.directory().resolve("inputs.properties"),snapshots.resolve("inputs.properties"));
+            inputs.copyProvenanceTo(snapshots);
             for(var card:inputs.cards()) Files.copy(card.snapshot(),snapshots.resolve(card.name()));
             for(var card:inputs.cards().subList(0,limit)) {
                 if(stopRequested.getAsBoolean()) throw new StoppedException("用户已停止计算");

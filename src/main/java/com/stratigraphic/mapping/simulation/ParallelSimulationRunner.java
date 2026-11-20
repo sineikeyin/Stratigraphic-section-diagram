@@ -71,6 +71,7 @@ public final class ParallelSimulationRunner {
             if(resuming&&(SimulationHistory.isComplete(batch,record)||SimulationHistory.hasLiveSolver(batch,record)))throw new IOException("该批次已完成或仍在其他进程中计算，不能重复恢复："+batch);
             SimulationHistory.Checkpoint checkpoint=resuming?SimulationHistory.inspect(batch,record):null;
             ModelInputs inputs=resuming?checkpoint.inputs():Objects.requireNonNull(initialInputs);
+            InputPreparation.verifySnapshot(inputs);
             Path workRoot=Files.createDirectories(batch.resolve("work")),runtime=Files.createDirectories(batch.resolve("runtime"));
             Path snapshots=Files.createDirectories(batch.resolve("inputs")),logs=Files.createDirectories(batch.resolve("logs"));
             Path partial=batch.resolve(name+".partial");
@@ -110,6 +111,7 @@ public final class ParallelSimulationRunner {
                 SimulationHistory.save(batch,record);
                 if(!resuming) {
                     Files.copy(inputs.directory().resolve("inputs.properties"),snapshots.resolve("inputs.properties"));
+                    inputs.copyProvenanceTo(snapshots);
                     for(var card:inputs.cards())Files.copy(card.snapshot(),snapshots.resolve(card.name()));
                 }
                 for(var card:inputs.cards())record.setProperty("input.sha256."+card.id(),SimulationHistory.sha256(snapshots.resolve(card.name())));

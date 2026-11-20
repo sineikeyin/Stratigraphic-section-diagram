@@ -74,7 +74,7 @@ class ResponseChartInteractionTest {
             click(canvas, selectedX, selectedY);
             Label inspector = (Label) amplitude.lookup(".response-inspector");
             assertTrue(inspector.isVisible());
-            assertEquals("深度 MD：10.7 m\n电极编号：81\n模值：" + original.amplitude(), inspector.getText());
+            assertEquals("深度 MD：10.7 m\n电极编号：81\n模值：" + original.amplitude() + " Ω·m", inspector.getText());
             assertFalse(inspector.getText().contains("相位"));
             assertTrue(inspector.getLayoutX() >= 54 && inspector.getLayoutX() + inspector.getWidth() <= 54 + width);
             assertTrue(inspector.getLayoutY() >= 28 && inspector.getLayoutY() + inspector.getHeight() <= 28 + height);

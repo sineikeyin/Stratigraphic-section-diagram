@@ -101,7 +101,7 @@ public final class WallUnfoldController {
         GridPane colors=new GridPane();colors.setHgap(6);colors.setVgap(6);
         colors.getColumnConstraints().addAll(new ColumnConstraints(),new ColumnConstraints());
         TextField[] fields={amplitudeMin,amplitudeMax,phaseMin,phaseMax};
-        String[] names={"模值下限（>0）","模值上限","相位下限 °","相位上限 °"};
+        String[] names={"模值下限 Ω·m（>0）","模值上限 Ω·m","相位下限 °","相位上限 °"};
         for(int i=0;i<4;i++) {fields[i].setPrefColumnCount(7);fields[i].setMinWidth(0);colors.add(label(names[i]),0,i);colors.add(fields[i],1,i);}
         TitledPane colorPane=new TitledPane("色标设置",new VBox(6,colors,applyColors));colorPane.setExpanded(false);
         TitledPane resultPane=new TitledPane("有关计算结果信息",new VBox(6,resultInfo,colorPane));
@@ -123,14 +123,21 @@ public final class WallUnfoldController {
     }
     private void loadInputs() {
         if(busy) return;
-        if(!Files.isDirectory(inputDirectory)) {error("输入目录不可用："+inputDirectory+"。请重新选择目录。");chooseInput();return;}
+        boolean convertedFromSlices=inputDirectory.toAbsolutePath().normalize().equals(workspaceRoot.resolve("192_NGI_Input").toAbsolutePath().normalize());
+        if(!convertedFromSlices&&!Files.isDirectory(inputDirectory)) {error("输入目录不可用："+inputDirectory+"。请重新选择目录。");chooseInput();return;}
         inputs=null;computeButton.setDisable(true);
         Task<ModelInputs> task=new Task<>() {
             @Override protected ModelInputs call() throws Exception {
-                return ModelInputs.load(inputDirectory,Path.of(System.getProperty("java.io.tmpdir"),"stratigraphic-input-cache"),(n,s)->{updateProgress(n,192);updateMessage(s);});
+                Path cache=Path.of(System.getProperty("java.io.tmpdir"),"stratigraphic-input-cache");
+                if(convertedFromSlices) {
+                    updateMessage("正在从原始切片转换并校验输入…");
+                    var prepared=InputPreparation.regenerate(workspaceRoot,cache,(done,message)->{updateProgress(done,384);updateMessage(message);});
+                    return prepared.inputs();
+                }
+                return ModelInputs.load(inputDirectory,cache,(n,s)->{updateProgress(n,192);updateMessage(s);});
             }
         };
-        runTask(task,0,value->{inputs=value;messages[0].setText("已加载 192/192，输入数据就绪");});
+        runTask(task,0,value->{inputs=value;messages[0].setText(convertedFromSlices?"已转换并校验 192/192，输入数据就绪":"已加载并校验 192/192，输入数据就绪");});
     }
     private void compute() {
         startComputation(null);
@@ -209,7 +216,7 @@ public final class WallUnfoldController {
         amplitudeMin.setText(""+amin);amplitudeMax.setText(""+amax);phaseMin.setText(""+pmin);phaseMax.setText(""+pmax);
         resultInfo.setText(value.resultSummary());messages[2].setText("已生成本文件全部 192 个电极的图片 · "+(long)value.size()*192+" 条记录");
         if(!progress[2].progressProperty().isBound()) progress[2].setProgress(1);
-        statusMessage.setText("图表来自："+value.source()+" · 灰色表示非正模值");
+        statusMessage.setText("文件来自："+value.source());
         statusMessage.setTooltip(new Tooltip(statusMessage.getText()));
         exportButton.setDisable(false);resetButton.setDisable(false);applyColors.setDisable(false);
     }

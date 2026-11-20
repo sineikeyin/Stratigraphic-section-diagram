@@ -86,7 +86,7 @@ class WallUnfoldFxmlTest {
                     clickX,28,clickX,28,javafx.scene.input.MouseButton.PRIMARY,1,false,false,false,false,false,false,false,false,false,true,
                     new javafx.scene.input.PickResult(canvas,new javafx.geometry.Point3D(clickX,28,0),0)));
                 Label inspector=(Label)chart.lookup(".response-inspector");
-                assertTrue(inspector.isVisible());assertEquals("深度 MD：0.0 m\n电极编号：1\n模值：0.0",inspector.getText());
+                assertTrue(inspector.isVisible());assertEquals("深度 MD：0.0 m\n电极编号：1\n模值：0.0 Ω·m",inspector.getText());
                 assertNull(root.lookup("#selectionMessage"));
                 ImageIO.write(SwingFXUtils.fromFXImage(scene.snapshot(null),null),"png",Path.of("target","ui-simulation-1440.png").toFile());
                 root.resize(1100,720);root.layout();

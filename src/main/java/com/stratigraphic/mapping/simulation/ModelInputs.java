@@ -43,27 +43,16 @@ public final class ModelInputs {
         return new ModelInputs(Path.of(manifest.getProperty("source",directory.toString())),directory,cards);
     }
     public static ModelInputs load(Path source, Path cacheRoot, BiConsumer<Integer,String> progress) throws IOException {
-        if (!Files.isDirectory(source)) throw new IOException("输入目录不可用：" + source);
-        var indexed = new TreeMap<Integer,Path>();
-        var errors = new ArrayList<String>();
-        Pattern pattern = Pattern.compile("(?i)^Card_(\\d{3})(?:_|\\.).*");
-        try (var stream = Files.list(source)) {
-            for (Path file : stream.filter(Files::isRegularFile).toList()) {
-                Matcher m = pattern.matcher(file.getFileName().toString());
-                if (!m.matches()) { errors.add("无法识别通道文件：" + file.getFileName()); continue; }
-                int id = Integer.parseInt(m.group(1));
-                if (id < 1 || id > CHANNELS) errors.add("编号越界：" + file.getFileName());
-                else if (indexed.containsKey(id)) errors.add("重复编号：" + indexed.get(id).getFileName() + "、" + file.getFileName());
-                else indexed.put(id, file);
-            }
-        }
-        for (int id=1; id<=CHANNELS; id++) if (!indexed.containsKey(id)) errors.add("缺少 Card_" + String.format("%03d",id));
-        if (!errors.isEmpty()) throw new IOException(String.join("\n", errors));
+        return load(source,cacheRoot,progress,source);
+    }
+    static ModelInputs load(Path source,Path cacheRoot,BiConsumer<Integer,String> progress,Path logicalSource)throws IOException {
+        var indexed = indexFiles(source);
         Files.createDirectories(cacheRoot);
         Path snapshot = Files.createTempDirectory(cacheRoot,"inputs-");
         var cards = new ArrayList<Card>();
+        var errors = new ArrayList<String>();
         var manifest = new Properties();
-        manifest.setProperty("source", source.toAbsolutePath().toString());
+        manifest.setProperty("source", logicalSource.toAbsolutePath().toString());
         for (var entry : indexed.entrySet()) {
             Path file = entry.getValue();
             byte[] bytes = Files.readAllBytes(file);
@@ -78,8 +67,43 @@ public final class ModelInputs {
             progress.accept(cards.size(), "已加载 " + cards.size() + "/192 · " + file.getFileName());
         }
         if (!errors.isEmpty()) throw new IOException(String.join("\n",errors));
+        Path conversion=source.resolve("conversion.properties");
+        if(Files.isRegularFile(conversion)) {
+            Properties provenance=new Properties();
+            try(var input=Files.newInputStream(conversion)){provenance.load(input);}
+            provenance.forEach((key,value)->manifest.setProperty("conversion."+key,value.toString()));
+        }
         try (var out=Files.newOutputStream(snapshot.resolve("inputs.properties"))) { manifest.store(out,"Input snapshot"); }
-        return new ModelInputs(source,snapshot,cards);
+        ModelInputs inputs=new ModelInputs(logicalSource,snapshot,cards);
+        if(Files.isRegularFile(conversion))InputPreparation.attachProvenance(inputs,source.resolve("conversion-source"),manifest);
+        return inputs;
+    }
+    void copyProvenanceTo(Path destination)throws IOException {
+        Path provenance=directory.resolve("conversion-source");
+        if(!Files.isDirectory(provenance))return;
+        Path target=Files.createDirectories(destination.resolve("conversion-source"));
+        try(var files=Files.list(provenance)) {
+            for(Path file:files.filter(Files::isRegularFile).toList())Files.copy(file,target.resolve(file.getFileName()));
+        }
+    }
+    static NavigableMap<Integer,Path> indexFiles(Path source) throws IOException {
+        if (!Files.isDirectory(source)) throw new IOException("输入目录不可用：" + source);
+        var indexed = new TreeMap<Integer,Path>();
+        var errors = new ArrayList<String>();
+        Pattern pattern = Pattern.compile("(?i)^Card_(\\d{3})(?:_|\\.).*");
+        try (var stream = Files.list(source)) {
+            for (Path file : stream.filter(Files::isRegularFile).filter(path->path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".txt")).toList()) {
+                Matcher m = pattern.matcher(file.getFileName().toString());
+                if (!m.matches()) { errors.add("无法识别通道文件：" + file.getFileName()); continue; }
+                int id = Integer.parseInt(m.group(1));
+                if (id < 1 || id > CHANNELS) errors.add("编号越界：" + file.getFileName());
+                else if (indexed.containsKey(id)) errors.add("重复编号：" + indexed.get(id).getFileName() + "、" + file.getFileName());
+                else indexed.put(id, file);
+            }
+        }
+        for (int id=1; id<=CHANNELS; id++) if (!indexed.containsKey(id)) errors.add("缺少 Card_" + String.format("%03d",id));
+        if (!errors.isEmpty()) throw new IOException(String.join("\n", errors));
+        return indexed;
     }
     public static Model parse(String text) {
         List<String> lines=text.replace("\uFEFF","").lines().map(s -> s.split("[!#]",2)[0].trim()).filter(s->!s.isEmpty()).toList();

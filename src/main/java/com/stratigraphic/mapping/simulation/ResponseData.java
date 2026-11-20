@@ -103,9 +103,9 @@ public final class ResponseData {
             Sample first=rows.values().stream().flatMap(Arrays::stream).filter(s->s.amplitude()<=0).findFirst().orElseThrow();
             warning="\n非正模值 "+nonPositive()+" 个，以灰色标记；首个 MD="+first.md()+" 电极="+first.electrode();
         }
-        return "结果文件："+source+"\nMD："+depths[0]+"～"+depths[depths.length-1]+" m（未添加绝对深度偏移）"
+        return "结果文件："+source+"\nMD："+depths[0]+"～"+depths[depths.length-1]+" m"
             +"\n深度点："+size()+" · 电极：192\n记录数："+(long)size()*192+"\n采样间隔："+sampling
-            +"\n实际模值："+min(false)+"～"+max(false)+"（单位未提供）\n实际相位："+min(true)+"～"+max(true)+"°"+warning
+            +"\n实际模值："+min(false)+"～"+max(false)+" Ω·m\n实际相位："+min(true)+"～"+max(true)+"°"+warning
             +(includeModel?"\n关联模型参数：\n"+metadata:"");
     }
 }
