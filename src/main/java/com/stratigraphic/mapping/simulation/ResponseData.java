@@ -83,19 +83,12 @@ public final class ResponseData {
     }
     public String resultSummary() {return describe(false);}
     private String describe(boolean includeModel) {
-        double step=depths.length>1?depths[1]-depths[0]:Double.NaN;
-        boolean uniform=true;
-        double minStep=Double.POSITIVE_INFINITY,maxStep=0;
-        for(int i=1;i<depths.length;i++) {
-            double s=depths[i]-depths[i-1]; minStep=Math.min(minStep,s); maxStep=Math.max(maxStep,s);
-            if(Math.abs(s-step)>Math.max(1e-10,Math.abs(step)*1e-6)) uniform=false;
-        }
-        String sampling=depths.length<2?"单深度点":uniform?step+" m（等间隔）":minStep+"～"+maxStep+" m（不等间隔）";
         String metadata="未提供";
+        String samplingMetadata="";
         Path sidecar=source.resolveSibling(source.getFileName()+".properties");
-        if(includeModel && Files.isRegularFile(sidecar)) {
+        if(Files.isRegularFile(sidecar)) {
             Properties p=new Properties();
-            try(var in=Files.newInputStream(sidecar)) { p.load(in); metadata=p.getProperty("input.summary","未提供"); }
+            try(var in=Files.newInputStream(sidecar)) { p.load(in); metadata=p.getProperty("input.summary","未提供"); samplingMetadata=p.getProperty("sampling.description",""); }
             catch(IOException ex) { metadata="关联记录不可读："+ex.getMessage(); }
         }
         String warning="";
@@ -104,8 +97,8 @@ public final class ResponseData {
             warning="\n非正模值 "+nonPositive()+" 个，以灰色标记；首个 MD="+first.md()+" 电极="+first.electrode();
         }
         return "结果文件："+source+"\nMD："+depths[0]+"～"+depths[depths.length-1]+" m"
-            +"\n深度点："+size()+" · 电极：192\n记录数："+(long)size()*192+"\n采样间隔："+sampling
+            +"\n深度点："+size()+" · 电极：192\n记录数："+(long)size()*192
             +"\n实际模值："+min(false)+"～"+max(false)+" Ω·m\n实际相位："+min(true)+"～"+max(true)+"°"+warning
-            +(includeModel?"\n关联模型参数：\n"+metadata:"");
+            +(samplingMetadata.isEmpty()?"":"\n"+samplingMetadata)+(includeModel?"\n关联模型参数：\n"+metadata:"");
     }
 }

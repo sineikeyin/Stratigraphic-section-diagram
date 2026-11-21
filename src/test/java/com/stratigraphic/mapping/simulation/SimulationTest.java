@@ -45,7 +45,7 @@ class SimulationTest {
     @Test void unorderedSixColumnsIndexedWithoutOldSpacing() throws Exception {
         Path file=fixture(temp.resolve("result.txt"));ResponseData data=ResponseData.read(file,(a,b)->{});
         assertEquals(3,data.size());assertEquals(0,data.depth(0));assertEquals(0.7,data.depth(2));assertEquals(192,data.sample(1,192).electrode());
-        assertTrue(data.summary().contains("不等间隔"));assertTrue(data.summary().contains("未提供"));
+        assertTrue(data.summary().contains("未提供"));
         Files.writeString(file,"0 1 3 -4 5 -53.13010235415598\n",StandardOpenOption.APPEND);
         assertThrows(IllegalArgumentException.class,()->ResponseData.read(file,(a,b)->{}));
     }

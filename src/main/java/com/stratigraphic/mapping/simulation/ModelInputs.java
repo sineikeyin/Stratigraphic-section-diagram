@@ -79,12 +79,19 @@ public final class ModelInputs {
         return inputs;
     }
     void copyProvenanceTo(Path destination)throws IOException {
+        Path samplingOriginal=directory.resolve("sampling-original");
+        if(Files.isDirectory(samplingOriginal))restoreSnapshot(samplingOriginal).copySnapshotTo(Files.createDirectories(destination.resolve("sampling-original")));
         Path provenance=directory.resolve("conversion-source");
         if(!Files.isDirectory(provenance))return;
         Path target=Files.createDirectories(destination.resolve("conversion-source"));
         try(var files=Files.list(provenance)) {
             for(Path file:files.filter(Files::isRegularFile).toList())Files.copy(file,target.resolve(file.getFileName()));
         }
+    }
+    void copySnapshotTo(Path destination)throws IOException {
+        Files.copy(directory.resolve("inputs.properties"),destination.resolve("inputs.properties"));
+        for(var card:cards)Files.copy(card.snapshot(),destination.resolve(card.name()));
+        copyProvenanceTo(destination);
     }
     static NavigableMap<Integer,Path> indexFiles(Path source) throws IOException {
         if (!Files.isDirectory(source)) throw new IOException("输入目录不可用：" + source);

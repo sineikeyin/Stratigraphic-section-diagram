@@ -59,6 +59,7 @@ public final class SimulationRunner {
         Properties record=new Properties();
         record.setProperty("started",Instant.now().toString());
         record.setProperty("input.summary",inputs.summary());
+        SamplingPlan.record(inputs,record);
         record.setProperty("snapshot",snapshots.toString());
         record.setProperty("state","RUNNING");
         for(var card:inputs.cards()) record.setProperty("channel."+card.id(),"PENDING");
@@ -144,16 +145,9 @@ public final class SimulationRunner {
             if(stopRequested.getAsBoolean()) throw new StoppedException("用户已停止计算");
             if(completed==192) {
                 Path staged=batch.resolve("complete.staged");
-                try(var writer=Files.newBufferedWriter(staged)) {
-                    for(int d=0;d<responses.get(0).size();d++) {
-                      if(stopRequested.getAsBoolean()) throw new StoppedException("用户已停止计算");
-                      for(var channel:responses) {
-                        var s=channel.get(d);
-                        writer.write(new ResponseData.Sample(responses.get(0).get(d).md(),s.electrode(),s.real(),s.imaginary(),s.amplitude(),s.phase()).line());
-                        writer.newLine();
-                      }
-                    }
-                }
+                var indexed=new TreeMap<Integer,List<ResponseData.Sample>>();
+                for(var channel:responses)indexed.put(channel.get(0).electrode(),channel);
+                SamplingPlan.writeResult(staged,indexed,record,stopRequested);
                 ResponseData.read(staged,(a,b)->{});
                 result=output.resolve(name+".txt");
                 record.setProperty("result",result.toString());

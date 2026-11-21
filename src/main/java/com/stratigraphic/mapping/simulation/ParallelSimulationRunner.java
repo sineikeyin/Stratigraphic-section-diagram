@@ -91,6 +91,7 @@ public final class ParallelSimulationRunner {
                 record.setProperty("started",Instant.now().toString());record.setProperty("input.summary",inputs.summary());record.setProperty("snapshot",snapshots.toString());
             }
             record.setProperty("parallelism",Integer.toString(parallelism));record.setProperty("native.threads",parallelism>1?"OMP/MKL/OPENBLAS=1":"inherited");
+            SamplingPlan.record(inputs,record);
             record.setProperty("state","RUNNING");record.setProperty("completed",Integer.toString(results.size()));
             record.remove("error");record.remove("failed.channel");record.remove("finished");
             for(var card:inputs.cards())record.setProperty("channel."+card.id(),results.containsKey(card.id())?"SUCCESS: recovered; input="+card.name():"PENDING");
@@ -216,16 +217,8 @@ public final class ParallelSimulationRunner {
         SimulationHistory.move(staged,partial);
     }
     private static Path publish(Path batch,Path output,String name,NavigableMap<Integer,List<ResponseData.Sample>> results,Properties record,BooleanSupplier stop)throws IOException {
-        Path staged=batch.resolve("complete.staged"),result=output.resolve(name+".txt");var first=results.firstEntry().getValue();
-        try(var writer=Files.newBufferedWriter(staged)) {
-            for(int depth=0;depth<first.size();depth++) {
-                checkStop(stop);
-                for(var entry:results.entrySet()) {
-                    var sample=entry.getValue().get(depth);
-                    writer.write(new ResponseData.Sample(first.get(depth).md(),entry.getKey(),sample.real(),sample.imaginary(),sample.amplitude(),sample.phase()).line());writer.newLine();
-                }
-            }
-        }
+        Path staged=batch.resolve("complete.staged"),result=output.resolve(name+".txt");
+        SamplingPlan.writeResult(staged,results,record,stop);
         ResponseData.read(staged,(done,total)->{});checkStop(stop);
         if(Files.exists(result)) {
             if(Files.mismatch(staged,result)!=-1)throw new IOException("结果位置已有不同文件，保留原文件："+result);Files.delete(staged);

@@ -77,6 +77,16 @@ class InputPreparationTest {
         assertTrue(error.contains("Card_002"));assertTrue(error.contains("Card_003"));
         assertEquals(previous,Files.readString(destination.resolve("Card_001_ang_model.txt")));assertFalse(Files.exists(temp.resolve("input_backups")));
     }
+    @Test void samplingKeepsConvertedProvenanceAndVerifiesItAfterBatchCopy()throws Exception {
+        setup();ModelInputs original=InputPreparation.regenerate(temp,temp.resolve("cache"),(done,message)->{}).inputs();
+        ModelInputs sampled=SamplingPlan.prepare(original,temp.resolve("cache"),0.2,2.54,0.9);
+        Path archived=Files.createDirectory(temp.resolve("sampled-archive"));sampled.copySnapshotTo(archived);
+        ModelInputs restored=ModelInputs.restoreSnapshot(archived);InputPreparation.verifySnapshot(restored);
+        assertTrue(Files.isRegularFile(archived.resolve("sampling-original/conversion-source/call.m")));
+        assertEquals(original.cards().get(0).model().layers(),restored.cards().get(0).model().layers());
+        Files.writeString(archived.resolve("sampling-original/conversion-source/Card_001_ang_model.txt"),"changed raw model");
+        assertThrows(IOException.class,()->InputPreparation.verifySnapshot(restored));
+    }
     @Test void oldMappingAndAlteredFractureOrParametersAreRejectedWithCorrectionHints()throws Exception {
         Path destination=setup();var settings=InputPreparation.settings(temp);
         String raw=Files.readString(temp.resolve("192_Slices_Output/Card_001_ang_model.txt"));

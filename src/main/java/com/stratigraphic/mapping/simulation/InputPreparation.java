@@ -200,6 +200,7 @@ public final class InputPreparation {
     static void verifySnapshot(ModelInputs inputs)throws IOException {
         Properties manifest=new Properties();
         try(var input=Files.newInputStream(inputs.directory().resolve("inputs.properties"))){manifest.load(input);}
+        if(manifest.containsKey("sampling.version")){SamplingPlan.verifySnapshot(inputs);return;}
         if(manifest.getProperty("conversion.rule")==null)return;
         Path provenance=inputs.directory().resolve("conversion-source");Settings settings=settings(provenance);
         if(!SimulationHistory.sha256(settings.script()).equals(manifest.getProperty("conversion.call.sha256"))

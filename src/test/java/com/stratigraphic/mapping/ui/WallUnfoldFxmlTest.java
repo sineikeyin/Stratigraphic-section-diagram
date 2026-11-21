@@ -139,6 +139,7 @@ class WallUnfoldFxmlTest {
         generateAndWait(root);assertEquals(4,selections.get());
         fx(()->{
             assertSame(retained,((StackPane)root.lookup("#amplitudeBox")).getChildren().get(0));assertFalse(button(root,"导出 PNG").isDisabled());
+            Label status=(Label)root.lookup("#statusMessage");assertTrue(status.getText().contains("错误详情"));assertEquals(status.getText(),status.getTooltip().getText());
             assertTrue(root.lookupAll(".label").stream().filter(n->n instanceof Label).map(n->((Label)n).getText()).anyMatch(s->s.contains(file.getFileName().toString())));return null;
         });
     }
@@ -258,6 +259,91 @@ class WallUnfoldFxmlTest {
     }
     private static void generateAndWait(Parent root)throws Exception {
         generateAndWait(root,()->{});
+    }
+    @Test void samplingInputsAreAboveLoadButtonAndEditingRequiresReload(@TempDir Path workspace)throws Exception {
+        CountDownLatch started=new CountDownLatch(1);
+        try{Platform.startup(started::countDown);assertTrue(started.await(10,TimeUnit.SECONDS));}catch(IllegalStateException ignored){}
+        Path converted=Files.createDirectory(workspace.resolve("converted"));
+        for(int id=1;id<=192;id++)Files.writeString(converted.resolve(String.format("Card_%03d.txt",id)),
+            "2500000 8\n0.005 1000 6\n0 0.001 1.5\n1\n2.5 100 10\n0\n");
+        FXMLLoader loader=new FXMLLoader(getClass().getResource("/com/stratigraphic/mapping/wall-unfold-view.fxml"));
+        loader.setControllerFactory(type->new WallUnfoldController(workspace));
+        Parent root=fx(()->{Parent view=loader.load();new Scene(view,1100,720);view.applyCss();view.layout();return view;});
+        WallUnfoldController controller=loader.getController();
+        var directory=WallUnfoldController.class.getDeclaredField("inputDirectory");directory.setAccessible(true);directory.set(controller,converted);
+        CountDownLatch loaded=new CountDownLatch(1);
+        fx(()->{
+            TextField begin=(TextField)root.lookup("#samplingBegin"),step=(TextField)root.lookup("#samplingStep"),end=(TextField)root.lookup("#samplingEnd");
+            assertEquals("0",begin.getText());assertEquals("1",step.getText());assertEquals("1.5",end.getText());
+            assertTrue(begin.localToScene(begin.getBoundsInLocal()).getMinY()<button(root,"获得输入数据").localToScene(button(root,"获得输入数据").getBoundsInLocal()).getMinY());
+            step.setText("2.55");button(root,"获得输入数据").fire();assertTrue(button(root,"计算输出数据").isDisabled());
+            assertTrue(((Label)root.lookup("#statusMessage")).getText().contains("2.54"));
+            begin.setText("0.2");step.setText("2.54");end.setText("0.9");
+            button(root,"计算输出数据").disabledProperty().addListener((observable,oldValue,disabled)->{if(!disabled)loaded.countDown();});
+            button(root,"获得输入数据").fire();assertTrue(begin.isDisabled());assertTrue(step.isDisabled());assertTrue(end.isDisabled());return null;
+        });
+        assertTrue(loaded.await(30,TimeUnit.SECONDS),"Valid sampling input should load without executing solver");
+        fx(()->{
+            assertFalse(button(root,"计算输出数据").isDisabled());
+            Label status=(Label)root.lookup("#statusMessage");assertTrue(status.getText().contains("输入数据已就绪"));assertEquals(status.getText(),status.getTooltip().getText());
+            var field=WallUnfoldController.class.getDeclaredField("inputs");field.setAccessible(true);
+            var inputs=(com.stratigraphic.mapping.simulation.ModelInputs)field.get(controller);
+            assertEquals(0.2,inputs.cards().get(0).model().begin());assertEquals(0.9,inputs.cards().get(0).model().end());
+            assertTrue(inputs.cards().get(0).model().step()<=0.00254);
+            ((TextField)root.lookup("#samplingStep")).setText("1");assertTrue(button(root,"计算输出数据").isDisabled());assertNull(field.get(controller));return null;
+        });
+    }
+    @Test void inputActivityKeepsSidebarGeometryScrollAndExpandedState(@TempDir Path workspace)throws Exception {
+        CountDownLatch started=new CountDownLatch(1);
+        try{Platform.startup(started::countDown);assertTrue(started.await(10,TimeUnit.SECONDS));}catch(IllegalStateException ignored){}
+        FXMLLoader loader=new FXMLLoader(getClass().getResource("/com/stratigraphic/mapping/wall-unfold-view.fxml"));
+        loader.setControllerFactory(type->new WallUnfoldController(workspace));
+        Parent root=fx(()->{
+            Parent view=loader.load();Scene scene=new Scene(view,1100,420);
+            scene.getStylesheets().add(getClass().getResource("/com/stratigraphic/mapping/app.css").toExternalForm());
+            view.applyCss();view.layout();return view;
+        });
+        WallUnfoldController controller=loader.getController();
+        CountDownLatch firstActivity=new CountDownLatch(1),secondActivity=new CountDownLatch(1),next=new CountDownLatch(1),release=new CountDownLatch(1),finished=new CountDownLatch(1);
+        var task=new javafx.concurrent.Task<String>() {
+            @Override protected String call()throws Exception {
+                updateProgress(80,192);updateMessage("已加载 80/192 · Card_080_"+"long_filename_".repeat(12)+".txt");
+                if(!next.await(20,TimeUnit.SECONDS))throw new IllegalStateException("Test did not advance input activity");
+                updateMessage("正在应用采样参数\n正在校验 192 个电极的独立输入快照\n原始模型保留");
+                if(!release.await(20,TimeUnit.SECONDS))throw new IllegalStateException("Test did not release input task");
+                return "loaded";
+            }
+        };
+        double[] before=fx(()->{
+            for(Node node:root.lookupAll(".titled-pane"))if(node instanceof TitledPane pane){pane.setAnimated(false);if(pane.getText().equals("有关计算结果信息"))pane.setExpanded(false);}
+            root.layout();ScrollPane scroll=(ScrollPane)root.lookup("#parameterScroll");
+            assertTrue(scroll.getContent().getBoundsInLocal().getHeight()>scroll.getViewportBounds().getHeight());
+            button(root,"获得输入数据").requestFocus();scroll.setVvalue(0.47);root.layout();
+            Label status=(Label)root.lookup("#statusMessage");
+            status.textProperty().addListener((observable,old,value)->{if(value.contains("已加载 80/192"))firstActivity.countDown();if(value.contains("正在应用采样参数"))secondActivity.countDown();});
+            double[] state={scroll.getContent().localToScene(0,0).getY(),scroll.getContent().getLayoutBounds().getWidth(),button(root,"计算输出数据").localToScene(0,0).getY(),button(root,"生成图片").localToScene(0,0).getY()};
+            var run=WallUnfoldController.class.getDeclaredMethod("runTask",javafx.concurrent.Task.class,int.class,java.util.function.Consumer.class);run.setAccessible(true);
+            run.invoke(controller,task,0,(java.util.function.Consumer<String>)value->{((Label)root.lookup("#inputMessage")).setText("已加载并校验 192/192\n计算 MD：0.2～0.9 m\n实际间距：2.54 mm");finished.countDown();});
+            assertTrue(status.getText().contains("正在获得输入数据"));return state;
+        });
+        try {
+            assertTrue(firstActivity.await(10,TimeUnit.SECONDS));assertStableInputSidebar(root,before);
+            next.countDown();assertTrue(secondActivity.await(10,TimeUnit.SECONDS));assertStableInputSidebar(root,before);
+            fx(()->{Label status=(Label)root.lookup("#statusMessage");assertTrue(status.getText().contains("192 个电极"));assertFalse(status.getText().contains("\n"));assertEquals(status.getText(),status.getTooltip().getText());
+                ImageIO.write(SwingFXUtils.fromFXImage(root.snapshot(null,null),null),"png",Path.of("target","ui-input-loading-stable-1100.png").toFile());return null;});
+            release.countDown();assertTrue(finished.await(10,TimeUnit.SECONDS));assertStableInputSidebar(root,before);
+        } finally {next.countDown();release.countDown();}
+    }
+    private static void assertStableInputSidebar(Parent root,double[] before)throws Exception {
+        fx(()->{
+            root.applyCss();root.layout();ScrollPane scroll=(ScrollPane)root.lookup("#parameterScroll");
+            // Compare displayed pixels: ScrollPane may adjust its normalized vvalue when child bounds change.
+            assertEquals(before[0],scroll.getContent().localToScene(0,0).getY(),0.1);assertEquals(before[1],scroll.getContent().getLayoutBounds().getWidth(),0.1);
+            assertEquals(before[2],button(root,"计算输出数据").localToScene(0,0).getY(),0.1);assertEquals(before[3],button(root,"生成图片").localToScene(0,0).getY(),0.1);
+            assertEquals(22,((Label)root.lookup("#inputMessage")).getHeight(),0.1);
+            for(Node node:root.lookupAll(".titled-pane"))if(node instanceof TitledPane pane){if(pane.getText().equals("有关计算结果信息"))assertFalse(pane.isExpanded());if(pane.getText().equals("历史记录"))assertTrue(pane.isExpanded());}
+            return null;
+        });
     }
     private static void generateAndWait(Parent root,Runnable whileLoading)throws Exception {
         CountDownLatch done=new CountDownLatch(1);
